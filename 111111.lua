@@ -828,8 +828,7 @@ function library.New(self, info, theme)
             local section_title = utility:Draw("Text", v2new(TitleLeft + TitlePad, -7), {
                 Font = Drawing.Fonts.Plex,
                 Size = 13,
-                Color = window.theme.accent,
-                Group = "accent",
+                Color = Color3.new(1, 1, 1),
                 Outline = true,
                 Text = name,
                 Parent = section_frame
