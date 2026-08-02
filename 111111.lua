@@ -1128,8 +1128,6 @@ function library.New(self, info, theme)
                             else
                                 keybind:AddToTable(input.UserInputType.Name)
                             end
-                        elseif input.UserInputType == Enum.UserInputType.MouseButton3 then
-                            keybind:AddToTable(input.UserInputType.Name)
                         elseif input.UserInputType == Enum.UserInputType.Keyboard then
                             keybind:AddToTable(input.KeyCode.Name)
                         end
@@ -1142,9 +1140,7 @@ function library.New(self, info, theme)
                                 keybind.binding = false
                                 keybind:Set({"unset", keybind.mode})
                             end
-                        elseif input.UserInputType == Enum.UserInputType.MouseButton1
-                            or input.UserInputType == Enum.UserInputType.MouseButton2
-                            or input.UserInputType == Enum.UserInputType.MouseButton3 then
+                        elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
                             keybind.binding = false
                             keybind:Set({input.UserInputType.Name, keybind.mode})
                         end
@@ -1153,9 +1149,7 @@ function library.New(self, info, theme)
 
                 utility:Connect(uis.InputEnded, function(input)
                     if not keybind.binding and keybind.mode == "hold" then
-                        if input.UserInputType == Enum.UserInputType.MouseButton1
-                            or input.UserInputType == Enum.UserInputType.MouseButton2
-                            or input.UserInputType == Enum.UserInputType.MouseButton3 then
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
                             if keybind.value == input.UserInputType.Name then
                                 if table.find(window.kbds, keybind.pointer) then
                                     table.remove(window.kbds, table.find(window.kbds, keybind.pointer))
