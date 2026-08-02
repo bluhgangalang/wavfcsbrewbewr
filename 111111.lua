@@ -931,7 +931,7 @@ function library.New(self, info, theme)
 
                 local keybind = {value = def, flag = flag, pointer = pointer, name = name, sname = name2, mode = "toggle", instances = {}, minst = {}, binding = false}
 
-                if pointer then
+                if pointer and pointer ~= "" then
                     library.pointers[pointer] = keybind
                 end
 
@@ -1002,15 +1002,31 @@ function library.New(self, info, theme)
                 end
 
                 function keybind.Set(self, value)
+                    local PreviousMode = self.mode
                     self.value = value[1]
-                    self.mode = value[2]
+                    self.mode = value[2] or self.mode or "toggle"
+
+                    if self.mode == "always" then
+                        if self.pointer and not table.find(window.kbds, self.pointer) then
+                            table.insert(window.kbds, self.pointer)
+                        end
+                    elseif PreviousMode == "always" and self.pointer then
+                        local Index = table.find(window.kbds, self.pointer)
+                        if Index then
+                            table.remove(window.kbds, Index)
+                        end
+                    end
 
                     self:Update()
                 end
 
                 function keybind.AddToTable(self, input_name)
                     if keybind.value == input_name then
-                        if keybind.mode == "toggle" then
+                        if keybind.mode == "always" then
+                            if keybind.pointer and not table.find(window.kbds, keybind.pointer) then
+                                table.insert(window.kbds, keybind.pointer)
+                            end
+                        elseif keybind.mode == "toggle" then
                             if table.find(window.kbds, keybind.pointer) then
                                 table.remove(window.kbds, table.find(window.kbds, keybind.pointer))
                             else
@@ -1045,7 +1061,7 @@ function library.New(self, info, theme)
                     local mframe = utility:Draw("Square", v2new(0, 15), {
                         Color = window.theme.dcont,
                         Group = "dcont",
-                        Size = v2new(48, 5 + 26),
+                        Size = v2new(48, 5 + 42),
                         ZIndex = 10^4;
                         Parent = keybind_frame
                     })
@@ -1061,7 +1077,7 @@ function library.New(self, info, theme)
 
                     local modes = {}
 
-                    for i, v in pairs({"Toggle", "Hold"}) do
+                    for i, v in pairs({"Toggle", "Hold", "Always"}) do
 
                         modes[i] = utility:Draw("Text", v2new(3, 2 + 14 * (i-1)), {
                             Font = Drawing.Fonts.Plex,
@@ -1094,14 +1110,11 @@ function library.New(self, info, theme)
                                 if #keybind.minst > 0 then
                                     if utility:MouseOverDrawing(keybind.minst[1]) then
                                         local offset = uis:GetMouseLocation().Y - keybind.minst[1].Position.Y
+                                        local ModeIndex = math.clamp(math.floor(offset / 14) + 1, 1, 3)
+                                        local ModeNames = {"toggle", "hold", "always"}
+                                        keybind:Set({keybind.value, ModeNames[ModeIndex]})
 
-                                        if offset >= 22 then
-                                            keybind.mode = "hold"
-                                        else
-                                            keybind.mode = "toggle"
-                                        end
-
-                                        for i, v in pairs({keybind.minst[3], keybind.minst[4]}) do
+                                        for i, v in pairs({keybind.minst[3], keybind.minst[4], keybind.minst[5]}) do
                                             v.Color = keybind.mode == v.Text:lower() and window.theme.accent or c3rgb(255, 255, 255)
                                         end
                                     else
@@ -1196,7 +1209,7 @@ function library.New(self, info, theme)
                     instances = {}
                 }
 
-                if pointer then
+                if pointer and pointer ~= "" then
                     library.pointers[pointer] = colorpicker
                 end
 
@@ -1245,10 +1258,15 @@ function library.New(self, info, theme)
                 end
 
                 function colorpicker.Get(self)
-                    if self.trans then
-                        return {{self.value[1]:ToHSV()}, self.value[2]}
+                    local color = self.value and self.value[1]
+                    if typeof(color) ~= "Color3" then
+                        color = def
                     end
-                    return {self.value[1]:ToHSV()}
+                    local h, s, v = color:ToHSV()
+                    if self.trans then
+                        return {{h, s, v}, tonumber(self.value and self.value[2]) or 0}
+                    end
+                    return {h, s, v}
                 end
 
                 function colorpicker.SetOffset(self, offset)
@@ -1783,7 +1801,7 @@ function library.New(self, info, theme)
 
                 local textbox = {name = name, typing = false, value = def, callback = callback, flag = flag, pointer = pointer}
 
-                if pointer then
+                if pointer and pointer ~= "" then
                     library.pointers[pointer] = textbox
                 end
 
@@ -1915,7 +1933,7 @@ function library.New(self, info, theme)
 
                 local toggle = {name = name, flag = flag, state = default, callback = callback, tt = tooltip, pointer = pointer}
 
-                if toggle.pointer then
+                if pointer and pointer ~= "" then
                     library.pointers[pointer] = toggle
                 end
 
@@ -2033,7 +2051,7 @@ function library.New(self, info, theme)
 
                 local slider = {name = name, flag = flag, pointer = pointer, value = def, min = min, max = max, suf = suf, dec = dec, mintval = mintval, maxtval = maxtval, holding = false, callback = callback}
 
-                if pointer then
+                if pointer and pointer ~= "" then
                     library.pointers[pointer] = slider
                 end
 
@@ -2199,7 +2217,7 @@ function library.New(self, info, theme)
 
                 local dropdown = {name = name, multi = multi, options = options, value = def, minOptions = minOptions, scrollable = scrollable, visOptions = visOptions, scrolling = {1, visOptions}, instances = {}, callback = callback, flag = flag, pointer = pointer}
 
-                if pointer then
+                if pointer and pointer ~= "" then
                     library.pointers[pointer] = dropdown
                 end
 
@@ -2509,7 +2527,7 @@ function library.New(self, info, theme)
 
                 local list = {name = name, value = def, scroll = {}, options = options, flag = flag, pointer = pointer, opinst = {}, lloop = nil}
 
-                if pointer then
+                if pointer and pointer ~= "" then
                     library.pointers[pointer] = list
                 end
 
@@ -2791,22 +2809,73 @@ function library.New(self, info, theme)
         end
     end
 
+    local function SanitizeConfigValue(Value, Depth)
+        Depth = Depth or 0
+        if Depth > 10 then
+            return nil
+        end
+
+        local ValueType = typeof(Value)
+        if ValueType == "nil" or ValueType == "boolean" or ValueType == "number" or ValueType == "string" then
+            if ValueType == "number" and (Value ~= Value or Value == math.huge or Value == -math.huge) then
+                return 0
+            end
+            return Value
+        elseif ValueType == "Color3" then
+            local h, s, v = Value:ToHSV()
+            return {h, s, v}
+        elseif ValueType == "EnumItem" then
+            return Value.Name
+        elseif ValueType == "table" then
+            local Out = {}
+            for Key, Entry in pairs(Value) do
+                local KeyType = typeof(Key)
+                if KeyType == "string" or KeyType == "number" then
+                    Out[Key] = SanitizeConfigValue(Entry, Depth + 1)
+                end
+            end
+            return Out
+        end
+
+        return nil
+    end
+
     function window.GetFakeRealNoobConfigFunctionDontUseMe(self)
         local new_table = {}
 
         for i, v in pairs(library.pointers) do
-            new_table[i] = v:Get()
+            if typeof(i) == "string" and i ~= "" and v and typeof(v.Get) == "function" then
+                local Ok, Value = pcall(function()
+                    return v:Get()
+                end)
+                if Ok then
+                    local Sanitized = SanitizeConfigValue(Value)
+                    if Sanitized ~= nil then
+                        new_table[i] = Sanitized
+                    end
+                end
+            end
         end
 
-        new_table["animation_saved"] = self.saved_settings
+        new_table["animation_saved"] = SanitizeConfigValue(self.saved_settings) or {}
 
         return game:GetService("HttpService"):JSONEncode(new_table)
     end
 
     function window.BestFunctionToKillMyselfFurryGayPornFemboyDildoMasterAloneWolfMode(self, IHATEMYSELFFUCKINGIWANTTODIEIMUSELESSINTHISLIFENOBODYLIKESME)
+        if typeof(IHATEMYSELFFUCKINGIWANTTODIEIMUSELESSINTHISLIFENOBODYLIKESME) ~= "table" then
+            return
+        end
+
         for USELESSNAMEFORNONAMERIHATEMYSELF, SHITTYVALUEFORNOBODYCAUSEIMALONEIMSODUMBFUCKINGUSELESS in pairs(IHATEMYSELFFUCKINGIWANTTODIEIMUSELESSINTHISLIFENOBODYLIKESME) do
-            if library.pointers[USELESSNAMEFORNONAMERIHATEMYSELF] then
-                library.pointers[USELESSNAMEFORNONAMERIHATEMYSELF]:Set(SHITTYVALUEFORNOBODYCAUSEIMALONEIMSODUMBFUCKINGUSELESS)
+            if USELESSNAMEFORNONAMERIHATEMYSELF == "animation_saved" then
+                continue
+            end
+            local Element = library.pointers[USELESSNAMEFORNONAMERIHATEMYSELF]
+            if Element and typeof(Element.Set) == "function" then
+                pcall(function()
+                    Element:Set(SHITTYVALUEFORNOBODYCAUSEIMALONEIMSODUMBFUCKINGUSELESS)
+                end)
             end
         end
 
