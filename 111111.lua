@@ -805,32 +805,28 @@ function library.New(self, info, theme)
                 Parent = section_frame
             })
 
-            -- Classic interrupted accent header with white title sitting on the line
-            local TitleWidth = math.max(utility:GetPlexSize(tostring(name)) or 0, #tostring(name) * 8)
-            local TitlePad = 6
-            local TitleBlock = TitleWidth + (TitlePad * 2)
-            local TitleLeft = 8
-
+            -- Exact original section header layout; white title with outline
             local section_accent = utility:Draw("Square", v2new(0, 0), {
-                Size = v2new(TitleLeft, 2),
+                Size = v2new(8, 2),
                 Color = window.theme.accent,
                 Group = "accent",
                 Parent = section_frame
             })
 
-            local section_accent2 = utility:Draw("Square", v2new(TitleLeft + TitleBlock, 0), {
-                Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2),
-                Color = window.theme.accent,
-                Group = "accent",
-                Parent = section_frame
-            })
-
-            local section_title = utility:Draw("Text", v2new(TitleLeft + TitlePad, -6), {
+            local section_title = utility:Draw("Text", v2new(9, -7), {
                 Font = Drawing.Fonts.Plex,
                 Size = 13,
                 Color = Color3.fromRGB(255, 255, 255),
                 Outline = true,
                 Text = name,
+                ZIndex = 5,
+                Parent = section_frame
+            })
+
+            local section_accent2 = utility:Draw("Square", v2new(11 + (#name * 7), 0), {
+                Size = v2new(math.max(0, section_frame.Size.X - (11 + (#name * 7))), 2),
+                Color = window.theme.accent,
+                Group = "accent",
                 Parent = section_frame
             })
 
@@ -871,9 +867,10 @@ function library.New(self, info, theme)
                 section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 10)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
-                section_accent.Size = v2new(TitleLeft, 2)
-                section_accent2.SetOffset(v2new(TitleLeft + TitleBlock, 0))
-                section_accent2.Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2)
+                section_accent.Size = v2new(8, 2)
+                section_accent2.SetOffset(v2new(11 + (#name * 7), 0))
+                section_accent2.Size = v2new(math.max(0, section_frame.Size.X - (11 + (#name * 7))), 2)
+                section_title.SetOffset(v2new(9, -7))
                 section_title.Color = Color3.fromRGB(255, 255, 255)
 
                 for i, v in pairs(self.things.lists) do
