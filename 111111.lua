@@ -265,6 +265,178 @@ do
         object.Data = data
     end
 
+    function utility:ImageData(object, data)
+        if object and data then
+            object.Data = data
+        end
+    end
+
+    -- // PNG encoder (store-compressed) so colorpicker gradients don't depend on dead imgur links
+    do
+        local crc_table
+        local function crc32(str)
+            if not crc_table then
+                crc_table = table.create(256)
+                for i = 0, 255 do
+                    local c = i
+                    for _ = 1, 8 do
+                        if c % 2 == 1 then
+                            c = bit32.bxor(0xEDB88320, bit32.rshift(c, 1))
+                        else
+                            c = bit32.rshift(c, 1)
+                        end
+                    end
+                    crc_table[i + 1] = c
+                end
+            end
+            local crc = 0xFFFFFFFF
+            for i = 1, #str do
+                local b = string.byte(str, i)
+                crc = bit32.bxor(crc_table[bit32.band(bit32.bxor(crc, b), 0xFF) + 1], bit32.rshift(crc, 8))
+            end
+            return bit32.bxor(crc, 0xFFFFFFFF)
+        end
+
+        local function u32be(n)
+            n = bit32.band(n, 0xFFFFFFFF)
+            return string.char(
+                bit32.rshift(n, 24),
+                bit32.band(bit32.rshift(n, 16), 0xFF),
+                bit32.band(bit32.rshift(n, 8), 0xFF),
+                bit32.band(n, 0xFF)
+            )
+        end
+
+        local function u16le(n)
+            n = bit32.band(n, 0xFFFF)
+            return string.char(bit32.band(n, 0xFF), bit32.rshift(n, 8))
+        end
+
+        local function adler32(data)
+            local a, b = 1, 0
+            for i = 1, #data do
+                a = (a + string.byte(data, i)) % 65521
+                b = (b + a) % 65521
+            end
+            return b * 65536 + a
+        end
+
+        local function zlib_store(data)
+            local parts = {string.char(0x78, 0x01)}
+            local i, len = 1, #data
+            while i <= len do
+                local stop = math.min(i + 65535 - 1, len)
+                local block = string.sub(data, i, stop)
+                local blen = #block
+                local final = stop >= len and 1 or 0
+                parts[#parts + 1] = string.char(final)
+                parts[#parts + 1] = u16le(blen)
+                parts[#parts + 1] = u16le(bit32.bxor(blen, 0xFFFF))
+                parts[#parts + 1] = block
+                i = stop + 1
+            end
+            parts[#parts + 1] = u32be(adler32(data))
+            return table.concat(parts)
+        end
+
+        local function png_chunk(tag, data)
+            local len = u32be(#data)
+            local payload = tag .. data
+            return len .. payload .. u32be(crc32(payload))
+        end
+
+        function utility:MakePNG(width, height, pixelFn)
+            local rows = table.create(height)
+            for y = 0, height - 1 do
+                local row = table.create(1 + width)
+                row[1] = string.char(0)
+                for x = 0, width - 1 do
+                    local r, g, b, a = pixelFn(x, y)
+                    row[x + 2] = string.char(
+                        math.clamp(math.floor(r + 0.5), 0, 255),
+                        math.clamp(math.floor(g + 0.5), 0, 255),
+                        math.clamp(math.floor(b + 0.5), 0, 255),
+                        math.clamp(math.floor((a or 255) + 0.5), 0, 255)
+                    )
+                end
+                rows[y + 1] = table.concat(row)
+            end
+
+            local raw = table.concat(rows)
+            local ihdr = u32be(width) .. u32be(height) .. string.char(8, 6, 0, 0, 0)
+            return "\137PNG\r\n\26\n"
+                .. png_chunk("IHDR", ihdr)
+                .. png_chunk("IDAT", zlib_store(raw))
+                .. png_chunk("IEND", "")
+        end
+
+        local sv_cache = {}
+
+        function utility:GetHueTexture(width, height)
+            local key = "hue:" .. width .. "x" .. height
+            if library.preloaded_images[key] then
+                return library.preloaded_images[key]
+            end
+            local data = utility:MakePNG(width, height, function(x, y)
+                local hue = height <= 1 and 0 or (y / (height - 1))
+                local c = c3hsv(hue, 1, 1)
+                return c.R * 255, c.G * 255, c.B * 255, 255
+            end)
+            library.preloaded_images[key] = data
+            return data
+        end
+
+        function utility:GetSVTexture(hue, width, height)
+            hue = math.clamp(tonumber(hue) or 0, 0, 1)
+            local q = math.floor(hue * 96 + 0.5)
+            local key = "sv:" .. q .. ":" .. width .. "x" .. height
+            if sv_cache[key] then
+                return sv_cache[key]
+            end
+            local h = q / 96
+            local data = utility:MakePNG(width, height, function(x, y)
+                local s = width <= 1 and 0 or (x / (width - 1))
+                local v = height <= 1 and 1 or (1 - (y / (height - 1)))
+                local c = c3hsv(h, s, v)
+                return c.R * 255, c.G * 255, c.B * 255, 255
+            end)
+            sv_cache[key] = data
+            return data
+        end
+
+        function utility:GetTransTexture(width, height, horizontal)
+            local key = "trans:" .. width .. "x" .. height .. (horizontal and ":h" or ":v")
+            if library.preloaded_images[key] then
+                return library.preloaded_images[key]
+            end
+            local data = utility:MakePNG(width, height, function(x, y)
+                local checker = (bit32.band(bit32.rshift(x, 2), 1) == bit32.band(bit32.rshift(y, 2), 1))
+                local base = checker and 220 or 70
+                local fade
+                if horizontal then
+                    fade = width <= 1 and 1 or (x / (width - 1))
+                else
+                    fade = height <= 1 and 1 or (y / (height - 1))
+                end
+                local shade = base * (1 - fade)
+                return shade, shade, shade, 255
+            end)
+            library.preloaded_images[key] = data
+            return data
+        end
+
+        function utility:ColorToHex(color)
+            if typeof(color) ~= "Color3" then
+                return "#FFFFFF"
+            end
+            return string.format("#%02X%02X%02X",
+                math.clamp(math.floor(color.R * 255 + 0.5), 0, 255),
+                math.clamp(math.floor(color.G * 255 + 0.5), 0, 255),
+                math.clamp(math.floor(color.B * 255 + 0.5), 0, 255)
+            )
+        end
+    end
+
     function utility:Connect(connection, func)
         local con = connection:Connect(func)
         table.insert(library.connections, con)
@@ -1012,7 +1184,17 @@ function library.New(self, info, theme)
                 local flag = info.flag
                 local callback = info.callback or function() end
 
-                local colorpicker = {value = def, name = name, trans = trans, callback = callback, pointer = pointer, flag = flag, dvalues = {}, instances = {}}
+                -- Always show bottom alpha; only expose {color, alpha} to callback when trans is set
+                local colorpicker = {
+                    value = {def, deftrans},
+                    name = name,
+                    trans = trans and true or false,
+                    callback = callback,
+                    pointer = pointer,
+                    flag = flag,
+                    dvalues = {},
+                    instances = {}
+                }
 
                 if pointer then
                     library.pointers[pointer] = colorpicker
@@ -1055,8 +1237,18 @@ function library.New(self, info, theme)
                     cptitle.Text = ""
                 end 
 
+                local function EmitValue(self)
+                    if self.trans then
+                        return self.value
+                    end
+                    return self.value[1]
+                end
+
                 function colorpicker.Get(self)
-                    return not self.trans and {self.value:ToHSV()} or {{self.value[1]:ToHSV()}, self.value[2]}
+                    if self.trans then
+                        return {{self.value[1]:ToHSV()}, self.value[2]}
+                    end
+                    return {self.value[1]:ToHSV()}
                 end
 
                 function colorpicker.SetOffset(self, offset)
@@ -1064,24 +1256,49 @@ function library.New(self, info, theme)
                 end
 
                 function colorpicker.Update(self)
-                    cpframe.Color = self.trans and self.value[1] or self.value
+                    local color = self.value[1]
+                    cpframe.Color = color
+                    cpframe.Transparency = 1 - math.clamp(self.value[2] or 0, 0, 1) * 0.65
 
                     if parent == section_frame then
                         self:SetOffset(v2new(parent.Size.X - 36, offsets[1].Y))
                     end
+
+                    if self._hex then
+                        self._hex.Text = utility:ColorToHex(color)
+                    end
+                    if self._preview then
+                        self._preview.Color = color
+                        self._preview.Transparency = math.clamp(self.value[2] or 0, 0, 1)
+                    end
+                    if self._alphaLabel then
+                        self._alphaLabel.Text = string.format("A %d%%", math.floor((1 - (self.value[2] or 0)) * 100 + 0.5))
+                    end
                 end
 
                 function colorpicker.Set(self, value)
-
-                    self.value = not self.trans and c3hsv(unpack(value)) or {c3hsv(value[1][1], value[1][2], value[1][3]), value[2]}
+                    if typeof(value) == "Color3" then
+                        self.value = {value, self.value and self.value[2] or deftrans}
+                    elseif typeof(value) == "table" then
+                        if typeof(value[1]) == "number" then
+                            -- HSV unpack {h,s,v}
+                            self.value = {c3hsv(value[1], value[2], value[3]), self.value and self.value[2] or deftrans}
+                        elseif typeof(value[1]) == "table" then
+                            -- {{h,s,v}, alpha}
+                            self.value = {c3hsv(value[1][1], value[1][2], value[1][3]), value[2] or 0}
+                        elseif typeof(value[1]) == "Color3" then
+                            self.value = {value[1], value[2] or 0}
+                        else
+                            self.value = {c3hsv(unpack(value)), self.value and self.value[2] or deftrans}
+                        end
+                    end
 
                     if colorpicker.flag ~= nil then
-                        library.flags[flag] = self.value
+                        library.flags[flag] = EmitValue(self)
                     end
 
                     self:Update()
-
-                    self.callback(self.value)
+                    self.callback(EmitValue(self))
                 end
 
                 function colorpicker.Close(self)
@@ -1091,6 +1308,10 @@ function library.New(self, info, theme)
                         end
 
                         self.instances = {}
+                        self._hex = nil
+                        self._preview = nil
+                        self._alphaLabel = nil
+                        self._refreshSV = nil
 
                         window.shit.colorpicker = nil
                     end
@@ -1100,14 +1321,22 @@ function library.New(self, info, theme)
 
                     window:HideUselessDumbassFuckingShitStopPastingMyCodePleaseYouAreSkidAndImGayILikeBigBlackManOkNoProblemThisIsASexcretFuncteiotieitns4epoivi2n45obvi6j45bv74gvho4hgv487()
 
-                    local hsv = (self.trans and {self.value[1]:ToHSV()}) or {self.value:ToHSV()}
+                    local hsv = {self.value[1]:ToHSV()}
+                    self.dvalues = {hsv[1], hsv[2], hsv[3], self.value[2] or 0, false, false, false}
 
-                    self.dvalues = {hsv[1], hsv[2], hsv[3], self.trans and self.value[2] or 0, false, false, false}
+                    local svSize = 140
+                    local sliderW = 14
+                    local pad = 10
+                    local gap = 8
+                    local alphaH = 12
+                    local footerH = 44
+                    local dropW = pad * 2 + svSize + gap + sliderW
+                    local dropH = pad * 2 + svSize + footerH
 
                     local cpdropframe = utility:Draw("Square", v2new(35, 0), {
                         Color = window.theme.dcont,
                         Group = "dcont",
-                        Size = v2new(self.trans and 152 or 137, 120),
+                        Size = v2new(dropW, dropH),
                         ZIndex = 10^4;
                         Parent = cpframe
                     })
@@ -1124,14 +1353,14 @@ function library.New(self, info, theme)
                     local cpdropframe_accent = utility:Draw("Square", v2zero, {
                         Color = window.theme.accent,
                         Group = "accent",
-                        Size = v2new(cpdropframe.Size.X, 1),
+                        Size = v2new(cpdropframe.Size.X, 2),
                         ZIndex = 10^4;
                         Parent = cpdropframe
                     })
 
-                    local cpdropframe_color = utility:Draw("Square", v2new(10, 10), {
-                        Color = c3hsv(self.dvalues[1], 1, 1),
-                        Size = v2new(100, 100),
+                    local cpdropframe_color = utility:Draw("Square", v2new(pad, pad), {
+                        Color = c3rgb(255, 255, 255),
+                        Size = v2new(svSize, svSize),
                         ZIndex = 10^4;
                         Parent = cpdropframe
                     })
@@ -1151,15 +1380,19 @@ function library.New(self, info, theme)
                         Parent = cpdropframe_color
                     })
 
-                    local cpdropframe_color_cursor = utility:Draw("Square", v2new(math.clamp(self.dvalues[2]*100, 0, 97), math.clamp((1-self.dvalues[3])*100, 0, 97)), {
+                    local cursorSize = 5
+                    local cursorX = math.clamp(math.floor(self.dvalues[2] * svSize) - 2, 0, svSize - cursorSize)
+                    local cursorY = math.clamp(math.floor((1 - self.dvalues[3]) * svSize) - 2, 0, svSize - cursorSize)
+
+                    local cpdropframe_color_cursor = utility:Draw("Square", v2new(cursorX, cursorY), {
                         Color = c3rgb(255, 255, 255),
-                        Size = v2new(3, 3),
+                        Size = v2new(cursorSize, cursorSize),
                         ZIndex = 10^4;
                         Parent = cpdropframe_color
                     })
 
                     local cpdropframe_color_cursor_outline = utility:Draw("Square", v2new(-1, -1), {
-                        Color = window.theme.outline,
+                        Color = c3rgb(0, 0, 0),
                         Group = "outline",
                         Size = cpdropframe_color_cursor.Size + v2new(2, 2),
                         Filled = false,
@@ -1167,10 +1400,11 @@ function library.New(self, info, theme)
                         Parent = cpdropframe_color_cursor
                     })
 
-                    local cpdropframe_hue = utility:Draw("Square", v2new(120, 10), {
+                    local hueX = pad + svSize + gap
+                    local cpdropframe_hue = utility:Draw("Square", v2new(hueX, pad), {
                         Color = window.theme.outline,
                         Group = "outline",
-                        Size = v2new(7, 100),
+                        Size = v2new(sliderW, svSize),
                         Filled = false,
                         ZIndex = 10^4;
                         Parent = cpdropframe
@@ -1182,15 +1416,16 @@ function library.New(self, info, theme)
                         Parent = cpdropframe_hue
                     })
 
-                    local cpdropframe_hue_picker = utility:Draw("Square", v2new(0, math.clamp(math.floor(self.dvalues[1]*100), 0, 99)), {
+                    local huePickY = math.clamp(math.floor(self.dvalues[1] * svSize), 0, svSize - 1)
+                    local cpdropframe_hue_picker = utility:Draw("Square", v2new(-1, huePickY), {
                         Color = c3rgb(255, 255, 255),
-                        Size = v2new(7, 1),
+                        Size = v2new(sliderW + 2, 3),
                         ZIndex = 10^4;
                         Parent = cpdropframe_hue
                     })
 
                     local cpdropframe_hue_picker_outline = utility:Draw("Square", v2new(-1, -1), {
-                        Color = window.theme.outline,
+                        Color = c3rgb(0, 0, 0),
                         Group = "outline",
                         Size = cpdropframe_hue_picker.Size + v2new(2, 2),
                         Filled = false,
@@ -1198,10 +1433,13 @@ function library.New(self, info, theme)
                         Parent = cpdropframe_hue_picker
                     })
 
-                    local cpdropframe_trans = utility:Draw("Square", v2new(137, 10), {
+                    -- Bottom alpha slider (indices 13-16 stay reserved for drag handlers)
+                    local alphaY = pad + svSize + 26
+                    local alphaW = dropW - pad * 2
+                    local cpdropframe_trans = utility:Draw("Square", v2new(pad, alphaY), {
                         Color = window.theme.outline,
                         Group = "outline",
-                        Size = v2new(7, 100),
+                        Size = v2new(alphaW, alphaH),
                         Filled = false,
                         ZIndex = 10^4;
                         Parent = cpdropframe
@@ -1213,15 +1451,16 @@ function library.New(self, info, theme)
                         Parent = cpdropframe_trans
                     })
 
-                    local cpdropframe_trans_picker = utility:Draw("Square", v2new(0, math.clamp(math.floor(self.dvalues[4]*100), 0, 99)), {
+                    local alphaPickX = math.clamp(math.floor(self.dvalues[4] * alphaW), 0, alphaW - 3)
+                    local cpdropframe_trans_picker = utility:Draw("Square", v2new(alphaPickX, -1), {
                         Color = c3rgb(255, 255, 255),
-                        Size = v2new(7, 1),
+                        Size = v2new(3, alphaH + 2),
                         ZIndex = 10^4;
                         Parent = cpdropframe_trans
                     })
 
                     local cpdropframe_trans_picker_outline = utility:Draw("Square", v2new(-1, -1), {
-                        Color = window.theme.outline,
+                        Color = c3rgb(0, 0, 0),
                         Group = "outline",
                         Size = cpdropframe_trans_picker.Size + v2new(2, 2),
                         Filled = false,
@@ -1229,20 +1468,57 @@ function library.New(self, info, theme)
                         Parent = cpdropframe_trans_picker
                     })
 
-                    if not self.trans then
-                        cpdropframe_trans.Visible = false
-                        cpdropframe_trans_image.Visible = false
-                        cpdropframe_trans_picker.Visible = false
-                        cpdropframe_trans_picker_outline.Visible = false
-                    end
+                    local preview = utility:Draw("Square", v2new(pad, pad + svSize + 6), {
+                        Color = self.value[1],
+                        Size = v2new(28, 12),
+                        ZIndex = 10^4;
+                        Parent = cpdropframe
+                    })
 
-                    utility:Image(cpdropframe_color_image, "https://i.imgur.com/wpDRqVH.png")
-                    utility:Image(cpdropframe_hue_image, "https://i.imgur.com/iEOsHFv.png")
-                    utility:Image(cpdropframe_trans_image, "https://i.imgur.com/GeMU2Ke.png")
+                    local preview_outline = utility:Draw("Square", v2new(-1, -1), {
+                        Color = window.theme.outline,
+                        Group = "outline",
+                        Size = preview.Size + v2new(2, 2),
+                        Filled = false,
+                        ZIndex = 10^4;
+                        Parent = preview
+                    })
+
+                    local hex = utility:Draw("Text", v2new(pad + 34, pad + svSize + 5), {
+                        Font = Drawing.Fonts.Plex,
+                        Size = 13,
+                        Color = c3rgb(220, 220, 220),
+                        Outline = true,
+                        Text = utility:ColorToHex(self.value[1]),
+                        ZIndex = 10^4;
+                        Parent = cpdropframe
+                    })
+
+                    local alphaLabel = utility:Draw("Text", v2new(dropW - pad - 52, pad + svSize + 5), {
+                        Font = Drawing.Fonts.Plex,
+                        Size = 13,
+                        Color = c3rgb(180, 180, 180),
+                        Outline = true,
+                        Text = string.format("A %d%%", math.floor((1 - (self.value[2] or 0)) * 100 + 0.5)),
+                        ZIndex = 10^4;
+                        Parent = cpdropframe
+                    })
+
+                    utility:ImageData(cpdropframe_color_image, utility:GetSVTexture(self.dvalues[1], svSize, svSize))
+                    utility:ImageData(cpdropframe_hue_image, utility:GetHueTexture(sliderW - 2, svSize - 2))
+                    utility:ImageData(cpdropframe_trans_image, utility:GetTransTexture(alphaW - 2, alphaH - 2, true))
+
+                    self._preview = preview
+                    self._hex = hex
+                    self._alphaLabel = alphaLabel
+                    self._refreshSV = function(hue)
+                        utility:ImageData(cpdropframe_color_image, utility:GetSVTexture(hue, svSize, svSize))
+                    end
 
                     self.instances = {cpdropframe, cpdropframe_outline, cpdropframe_accent, cpdropframe_color, cpdropframe_color_outline, cpdropframe_color_image,
                         cpdropframe_color_cursor, cpdropframe_color_cursor_outline, cpdropframe_hue, cpdropframe_hue_image, cpdropframe_hue_picker, cpdropframe_hue_picker_outline,
-                        cpdropframe_trans, cpdropframe_trans_image, cpdropframe_trans_picker, cpdropframe_trans_picker_outline
+                        cpdropframe_trans, cpdropframe_trans_image, cpdropframe_trans_picker, cpdropframe_trans_picker_outline,
+                        preview, preview_outline, hex, alphaLabel
                     }
 
                     window.shit.colorpicker = self
@@ -1255,7 +1531,20 @@ function library.New(self, info, theme)
                     return section:_Colorpicker(info, {v2new(-35, 0) , v2zero}, cpframe, false, pointer .. "Colorpicker", cptable)
                 end
 
-                colorpicker:Set(colorpicker.trans and {{colorpicker.value:ToHSV()}, deftrans} or {colorpicker.value:ToHSV()})
+                colorpicker:Set({{def:ToHSV()}, deftrans})
+
+                local function ApplyAlphaFromMouse()
+                    local bar = colorpicker.instances[13]
+                    local pick = colorpicker.instances[15]
+                    if not bar or not pick then
+                        return
+                    end
+                    local offset = uis:GetMouseLocation().X - bar.Position.X
+                    local size = bar.Size.X
+                    local px = math.clamp(offset / size, 0, 1)
+                    pick.SetOffset(v2new(math.clamp(math.floor(px * size), 0, size - 3), -1))
+                    colorpicker.dvalues[4] = px
+                end
 
                 utility:Connect(uis.InputBegan, function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1291,29 +1580,22 @@ function library.New(self, info, theme)
 
                                             local py = math.clamp(offset / size, 0, 1)
 
-                                            colorpicker.instances[11].SetOffset(v2new(0, math.clamp(math.floor(py*size), 0, size-1)))
-
-                                            colorpicker.instances[4].Color = c3hsv(py, 1, 1)
+                                            colorpicker.instances[11].SetOffset(v2new(-1, math.clamp(math.floor(py*size), 0, size-3)))
 
                                             colorpicker.dvalues[1] = py
+                                            if colorpicker._refreshSV then
+                                                colorpicker._refreshSV(py)
+                                            end
                                             colorpicker.dvalues[6] = true
-                                        elseif utility:MouseOverDrawing(colorpicker.instances[13]) and colorpicker.trans then
-                                            local offset = uis:GetMouseLocation().Y - colorpicker.instances[13].Position.Y
-
-                                            local size = colorpicker.instances[13].Size.Y
-
-                                            local py = math.clamp(offset / size, 0, 1)
-
-                                            colorpicker.instances[15].SetOffset(v2new(0, math.clamp(math.floor(py*size), 0, size-1)))
-
-                                            colorpicker.dvalues[4] = py
+                                        elseif utility:MouseOverDrawing(colorpicker.instances[13]) then
+                                            ApplyAlphaFromMouse()
                                             colorpicker.dvalues[7] = true
                                         end
 
                                         local dvalues = colorpicker.dvalues
                                         local color = c3hsv(dvalues[1], dvalues[2], dvalues[3])
 
-                                        colorpicker:Set(colorpicker.trans and {{color:ToHSV()}, dvalues[4]} or {color:ToHSV()})
+                                        colorpicker:Set({{color:ToHSV()}, dvalues[4]})
                                     else
                                         colorpicker:Close()
                                     end
@@ -1353,27 +1635,20 @@ function library.New(self, info, theme)
 
                                 local py = math.clamp(offset / size, 0, 1)
 
-                                colorpicker.instances[11].SetOffset(v2new(0, math.clamp(math.floor(py*size), 0, size-1)))
-
-                                colorpicker.instances[4].Color = c3hsv(py, 1, 1)
+                                colorpicker.instances[11].SetOffset(v2new(-1, math.clamp(math.floor(py*size), 0, size-3)))
 
                                 colorpicker.dvalues[1] = py
+                                if colorpicker._refreshSV then
+                                    colorpicker._refreshSV(py)
+                                end
                             elseif colorpicker.dvalues[7] then
-                                local offset = uis:GetMouseLocation().Y - colorpicker.instances[13].Position.Y
-
-                                local size = colorpicker.instances[13].Size.Y
-
-                                local py = math.clamp(offset / size, 0, 1)
-
-                                colorpicker.instances[15].SetOffset(v2new(0, math.clamp(math.floor(py*size), 0, size-1)))
-
-                                colorpicker.dvalues[4] = py
+                                ApplyAlphaFromMouse()
                             end
 
                             local dvalues = colorpicker.dvalues
                             local color = c3hsv(dvalues[1], dvalues[2], dvalues[3])
 
-                            colorpicker:Set(colorpicker.trans and {{color:ToHSV()}, dvalues[4]} or {color:ToHSV()})
+                            colorpicker:Set({{color:ToHSV()}, dvalues[4]})
                         end
                     end
                 end)
@@ -1408,29 +1683,22 @@ function library.New(self, info, theme)
 
                             local py = math.clamp(offset / size, 0, 1)
 
-                            colorpicker.instances[11].SetOffset(v2new(0, math.clamp(math.floor(py*size), 0, size-1)))
-
-                            colorpicker.instances[4].Color = c3hsv(py, 1, 1)
+                            colorpicker.instances[11].SetOffset(v2new(-1, math.clamp(math.floor(py*size), 0, size-3)))
 
                             colorpicker.dvalues[1] = py
+                            if colorpicker._refreshSV then
+                                colorpicker._refreshSV(py)
+                            end
                             colorpicker.dvalues[6] = false
                         elseif colorpicker.dvalues[7] then
-                            local offset = uis:GetMouseLocation().Y - colorpicker.instances[13].Position.Y
-
-                            local size = colorpicker.instances[13].Size.Y
-
-                            local py = math.clamp(offset / size, 0, 1)
-
-                            colorpicker.instances[15].SetOffset(v2new(0, math.clamp(math.floor(py*size), 0, size-1)))
-
-                            colorpicker.dvalues[4] = py
+                            ApplyAlphaFromMouse()
                             colorpicker.dvalues[7] = false
                         end
 
                         local dvalues = colorpicker.dvalues
                         local color = c3hsv(dvalues[1], dvalues[2], dvalues[3])
 
-                        colorpicker:Set(colorpicker.trans and {{color:ToHSV()}, dvalues[4]} or {color:ToHSV()})
+                        colorpicker:Set({{color:ToHSV()}, dvalues[4]})
                     end
                 end)
 
