@@ -805,9 +805,9 @@ function library.New(self, info, theme)
                 Parent = section_frame
             })
 
-            -- Original interrupted accent header, white title (bg blocks line through letters)
-            local TitleWidth = math.max(utility:GetPlexSize(name) or 0, #name * 7)
-            local TitlePad = 4
+            -- Classic interrupted accent header with white title sitting on the line
+            local TitleWidth = math.max(utility:GetPlexSize(tostring(name)) or 0, #tostring(name) * 8)
+            local TitlePad = 6
             local TitleBlock = TitleWidth + (TitlePad * 2)
             local TitleLeft = 8
 
@@ -825,14 +825,7 @@ function library.New(self, info, theme)
                 Parent = section_frame
             })
 
-            local section_title_bg = utility:Draw("Square", v2new(TitleLeft, -6), {
-                Size = v2new(TitleBlock, 14),
-                Color = window.theme.cont,
-                Group = "cont",
-                Parent = section_frame
-            })
-
-            local section_title = utility:Draw("Text", v2new(TitleLeft + TitlePad, -7), {
+            local section_title = utility:Draw("Text", v2new(TitleLeft + TitlePad, -6), {
                 Font = Drawing.Fonts.Plex,
                 Size = 13,
                 Color = Color3.fromRGB(255, 255, 255),
@@ -878,6 +871,8 @@ function library.New(self, info, theme)
                 section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 10)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
+                section_accent.Size = v2new(TitleLeft, 2)
+                section_accent2.SetOffset(v2new(TitleLeft + TitleBlock, 0))
                 section_accent2.Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2)
                 section_title.Color = Color3.fromRGB(255, 255, 255)
 
@@ -2689,7 +2684,7 @@ function library.New(self, info, theme)
                 return list
             end
 
-            section.instances = {section_frame, section_inline, section_outline, section_accent, section_accent2, section_title_bg, section_title}
+            section.instances = {section_frame, section_inline, section_outline, section_accent, section_accent2, section_title}
 
             if not section.rna then
                 table.insert(self.sections, section)
