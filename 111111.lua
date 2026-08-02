@@ -805,32 +805,17 @@ function library.New(self, info, theme)
                 Parent = section_frame
             })
 
-            local section_accent = utility:Draw("Square", v2new(0, 0), {
-                Size = v2new(8, 2),
-                Color = window.theme.accent,
-                Group = "accent",
-                Parent = section_frame
-            })
-
-            local section_title = utility:Draw("Text", v2new(9, -7), {
+            local section_title = utility:Draw("Text", v2new(6, 4), {
                 Font = Drawing.Fonts.Plex,
                 Size = 13,
                 Color = Color3.new(1, 1, 1),
-                --Outline = true,
+                Outline = true,
                 Text = name,
                 Parent = section_frame
             })
 
-            local section_title_bold = utility:Draw("Text", v2new(1, 0), {
-                Font = Drawing.Fonts.Plex,
-                Size = 13,
-                Color = Color3.new(1, 1, 1),
-                Text = name,
-                Parent = section_title
-            })
-
-            local section_accent2 = utility:Draw("Square", v2new(11 + (#name * 7), 0), {
-                Size = v2new(section_frame.Size.X - (11 + (#name * 7)), 2),
+            local section_accent = utility:Draw("Square", v2new(0, 20), {
+                Size = v2new(section_frame.Size.X, 2),
                 Color = window.theme.accent,
                 Group = "accent",
                 Parent = section_frame
@@ -855,12 +840,12 @@ function library.New(self, info, theme)
             end
 
             function section.NextObjectPosition(self)
-                return self.scale > 0 and self.scale or 10
+                return self.scale > 0 and self.scale or 26
             end
 
             function section.UpdateScale(self, number)
                 if self.scale == 0 then
-                    self.scale = 10
+                    self.scale = 26
                 end
 
                 self.scale = self.scale + number + 5
@@ -870,10 +855,10 @@ function library.New(self, info, theme)
 
                 local tside = tab.sides[self.side == "left" and 1 or 2]
 
-                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 10)
+                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 26)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
-                section_accent2.Size = v2new(section_frame.Size.X - (11 + (#name * 7)), 2)
+                section_accent.Size = v2new(section_frame.Size.X, 2)
 
                 for i, v in pairs(self.things.lists) do
                     v:update()
@@ -2683,7 +2668,7 @@ function library.New(self, info, theme)
                 return list
             end
 
-            section.instances = {section_frame, section_inline, section_outline, section_title, section_title_bold, section_accent, section_accent2}
+            section.instances = {section_frame, section_inline, section_outline, section_title, section_accent}
 
             if not section.rna then
                 table.insert(self.sections, section)
