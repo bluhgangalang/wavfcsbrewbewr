@@ -805,12 +805,40 @@ function library.New(self, info, theme)
                 Parent = section_frame
             })
 
-            local section_title = utility:Draw("Text", v2new(6, 2), {
+            -- Real section header: accent line with title cutout (line never through text)
+            local TitleWidth = utility:GetPlexSize(name)
+            local TitlePad = 5
+            local TitleBlock = TitleWidth + (TitlePad * 2)
+            local TitleLeft = 8
+
+            local section_accent = utility:Draw("Square", v2new(0, 0), {
+                Size = v2new(TitleLeft, 2),
+                Color = window.theme.accent,
+                Group = "accent",
+                Parent = section_frame
+            })
+
+            local section_title_bg = utility:Draw("Square", v2new(TitleLeft, -1), {
+                Size = v2new(TitleBlock, 4),
+                Color = window.theme.cont,
+                Group = "cont",
+                Parent = section_frame
+            })
+
+            local section_title = utility:Draw("Text", v2new(TitleLeft + TitlePad, -7), {
                 Font = Drawing.Fonts.Plex,
                 Size = 13,
-                Color = Color3.new(1, 1, 1),
+                Color = window.theme.accent,
+                Group = "accent",
                 Outline = true,
                 Text = name,
+                Parent = section_frame
+            })
+
+            local section_accent2 = utility:Draw("Square", v2new(TitleLeft + TitleBlock, 0), {
+                Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2),
+                Color = window.theme.accent,
+                Group = "accent",
                 Parent = section_frame
             })
 
@@ -833,12 +861,12 @@ function library.New(self, info, theme)
             end
 
             function section.NextObjectPosition(self)
-                return self.scale > 0 and self.scale or 18
+                return self.scale > 0 and self.scale or 14
             end
 
             function section.UpdateScale(self, number)
                 if self.scale == 0 then
-                    self.scale = 18
+                    self.scale = 14
                 end
 
                 self.scale = self.scale + number + 5
@@ -848,9 +876,10 @@ function library.New(self, info, theme)
 
                 local tside = tab.sides[self.side == "left" and 1 or 2]
 
-                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 18)
+                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 14)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
+                section_accent2.Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2)
 
                 for i, v in pairs(self.things.lists) do
                     v:update()
@@ -2660,7 +2689,7 @@ function library.New(self, info, theme)
                 return list
             end
 
-            section.instances = {section_frame, section_inline, section_outline, section_title}
+            section.instances = {section_frame, section_inline, section_outline, section_accent, section_title_bg, section_title, section_accent2}
 
             if not section.rna then
                 table.insert(self.sections, section)
