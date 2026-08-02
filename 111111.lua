@@ -806,8 +806,12 @@ function library.New(self, info, theme)
             })
 
             -- Real section header: accent line with title cutout (line never through text)
-            local TitleWidth = utility:GetPlexSize(name)
-            local TitlePad = 5
+            local Measured = utility:GetPlexSize(name)
+            if typeof(Measured) ~= "number" or Measured < 1 then
+                Measured = #name * 7
+            end
+            local TitleWidth = math.max(Measured, #name * 7)
+            local TitlePad = 6
             local TitleBlock = TitleWidth + (TitlePad * 2)
             local TitleLeft = 8
 
@@ -818,6 +822,14 @@ function library.New(self, info, theme)
                 Parent = section_frame
             })
 
+            local section_accent2 = utility:Draw("Square", v2new(TitleLeft + TitleBlock, 0), {
+                Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2),
+                Color = window.theme.accent,
+                Group = "accent",
+                Parent = section_frame
+            })
+
+            -- Drawn after accents so the white title always sits on top
             local section_title_bg = utility:Draw("Square", v2new(TitleLeft, -1), {
                 Size = v2new(TitleBlock, 4),
                 Color = window.theme.cont,
@@ -828,16 +840,9 @@ function library.New(self, info, theme)
             local section_title = utility:Draw("Text", v2new(TitleLeft + TitlePad, -7), {
                 Font = Drawing.Fonts.Plex,
                 Size = 13,
-                Color = Color3.new(1, 1, 1),
+                Color = Color3.fromRGB(255, 255, 255),
                 Outline = true,
                 Text = name,
-                Parent = section_frame
-            })
-
-            local section_accent2 = utility:Draw("Square", v2new(TitleLeft + TitleBlock, 0), {
-                Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2),
-                Color = window.theme.accent,
-                Group = "accent",
                 Parent = section_frame
             })
 
@@ -879,6 +884,7 @@ function library.New(self, info, theme)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
                 section_accent2.Size = v2new(math.max(0, section_frame.Size.X - (TitleLeft + TitleBlock)), 2)
+                section_title.Color = Color3.fromRGB(255, 255, 255)
 
                 for i, v in pairs(self.things.lists) do
                     v:update()
@@ -2688,7 +2694,7 @@ function library.New(self, info, theme)
                 return list
             end
 
-            section.instances = {section_frame, section_inline, section_outline, section_accent, section_title_bg, section_title, section_accent2}
+            section.instances = {section_frame, section_inline, section_outline, section_accent, section_accent2, section_title_bg, section_title}
 
             if not section.rna then
                 table.insert(self.sections, section)
