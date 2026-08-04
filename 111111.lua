@@ -759,7 +759,6 @@ function library.New(self, info, theme)
             -- // finally, new code;
 
             local autofill = info.autofill or false;
-            local scrollable = info.scrollable or autofill or false
 
             -- // side check
 
@@ -769,7 +768,7 @@ function library.New(self, info, theme)
 
             -- // section
 
-            local section = {name = name, side = side, instances = {}, scale = 0, things = {buttons = {}, toggles = {}, textboxes = {}, dropdowns = {}, sliders = {}, colorpickers ={}, keybinds = {}, lists = {}}, rna = render_non_attached, scrollable = scrollable, scrollY = 0, maxScroll = 0}
+            local section = {name = name, side = side, instances = {}, scale = 0, things = {buttons = {}, toggles = {}, textboxes = {}, dropdowns = {}, sliders = {}, colorpickers ={}, keybinds = {}, lists = {}}, rna = render_non_attached}
 
             local section_frame 
 
@@ -883,33 +882,6 @@ function library.New(self, info, theme)
                         v:Update()
                     end
                 end
-
-                -- scrolling: compute content size and clamp scroll
-                local contentHeight = math.max(self.scale, 10)
-                self.maxScroll = math.max(0, contentHeight - section_frame.Size.Y + 6)
-
-                if self.scrollable then
-                    -- adjust offsets and visibility of child elements according to scrollY
-                    local function adjustWidget(v)
-                        pcall(function()
-                            local off = v.GetOffset and v.GetOffset() or v.GetOffset and Vector2.new(0, 0)
-                            local newY = off.Y - (self.scrollY or 0)
-                            if v.SetOffset then
-                                v.SetOffset(v2new(off.X, newY))
-                            end
-                            local isVisible = section_frame.Visible and (newY >= -20 and newY <= section_frame.Size.Y - 6)
-                            if v.Visible ~= nil then
-                                v.Visible = isVisible
-                            end
-                        end)
-                    end
-
-                    for _, coll in pairs(self.things) do
-                        for _, v in pairs(coll) do
-                            adjustWidget(v)
-                        end
-                    end
-                end
             end
 
             function section.SetPositionIHateMyselfAndIWannaDieOk(self, new_pos)
@@ -945,16 +917,6 @@ function library.New(self, info, theme)
                     end
                 elseif not utility:MouseOverDrawing(main_frame) and window.tooltip then
                     window.tooltip:SetPosition(v2new(-1000, -1000))
-                end
-            end)
-
-            -- mouse wheel scrolling for sections that are scrollable
-            utility:Connect(uis.InputChanged, function(input)
-                if input.UserInputType == Enum.UserInputType.MouseWheel and section.scrollable and window.sshit and utility:MouseOverDrawing(section_frame) then
-                    local delta = -input.Position.Z * 30
-                    section.scrollY = math.clamp((section.scrollY or 0) + delta, 0, section.maxScroll or 0)
-                    -- trigger update so offsets are recalculated
-                    section:Update()
                 end
             end)
 
@@ -1228,15 +1190,16 @@ function library.New(self, info, theme)
             function section._Colorpicker(self, info, offsets, parent, do_update, pointer, cptable)
                 local name = info.name
                 local def = info.def or c3rgb(255, 0, 0)
-                -- Alpha slider is always shown; always expose {color, alpha} so features can use it
+                local trans = info.trans or info.transparency
                 local deftrans = info.deftrans or info.defaultrans or 0
                 local flag = info.flag
                 local callback = info.callback or function() end
 
+                -- Always show bottom alpha; only expose {color, alpha} to callback when trans is set
                 local colorpicker = {
                     value = {def, deftrans},
                     name = name,
-                    trans = true,
+                    trans = trans and true or false,
                     callback = callback,
                     pointer = pointer,
                     flag = flag,
@@ -1286,7 +1249,10 @@ function library.New(self, info, theme)
                 end 
 
                 local function EmitValue(self)
-                    return self.value
+                    if self.trans then
+                        return self.value
+                    end
+                    return self.value[1]
                 end
 
                 function colorpicker.Get(self)
@@ -1295,7 +1261,10 @@ function library.New(self, info, theme)
                         color = def
                     end
                     local h, s, v = color:ToHSV()
-                    return {{h, s, v}, tonumber(self.value and self.value[2]) or 0}
+                    if self.trans then
+                        return {{h, s, v}, tonumber(self.value and self.value[2]) or 0}
+                    end
+                    return {h, s, v}
                 end
 
                 function colorpicker.SetOffset(self, offset)
