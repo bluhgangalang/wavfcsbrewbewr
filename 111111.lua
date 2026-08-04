@@ -912,13 +912,12 @@ function library.New(self, info, theme)
                                 local newY = off.Y - (self.scrollY or 0)
                                 root.SetOffset(v2new(off.X, newY))
 
-                                local topY = section_frame.Position.Y + newY
-                                local bottomY = topY + (root.Size and root.Size.Y or 16)
-                                local visible = section_frame.Visible and bottomY >= section_frame.Position.Y + 4 and topY <= section_frame.Position.Y + section_frame.Size.Y - 4
-
                                 for _, inst in pairs(widget.instances or {}) do
                                     if inst.Visible ~= nil then
-                                        inst.Visible = visible
+                                        local topY = inst.Position and inst.Position.Y or section_frame.Position.Y
+                                        local height = inst.Size and inst.Size.Y or 16
+                                        local bottomY = topY + height
+                                        inst.Visible = section_frame.Visible and bottomY >= section_frame.Position.Y + 4 and topY <= section_frame.Position.Y + section_frame.Size.Y - 4
                                     end
                                 end
                             end
