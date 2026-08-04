@@ -631,6 +631,8 @@ function library.New(self, info, theme)
         local offset = v2new(0, -19)
 
         local tab = {name = name, instances = {}, sections = {}, sides = {{}, {}}, on = false}
+        tab.scrollY = {0,0}
+        tab.maxScroll = {0,0}
 
         local count = 1
 
@@ -740,7 +742,7 @@ function library.New(self, info, theme)
 
                     -- // set offset
 
-                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2+6, offset))
+                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2+6, offset - (tab.scrollY[sn] or 0)))
                 end
             end
 
@@ -749,7 +751,37 @@ function library.New(self, info, theme)
             for i, v in pairs(self.sections) do
                 v:Update()
             end
+
+            -- compute max scroll per side by measuring last section bottom
+            for sn, side in pairs(self.sides) do
+                local last = side[#side]
+                if last and last.instances and last.instances[1] then
+                    local bottom = last.instances[1].GetOffset().Y + last.instances[1].Size.Y
+                    tab.maxScroll[sn] = math.max(0, bottom - tabs_frame.Size.Y + 6)
+                    tab.scrollY[sn] = math.clamp(tab.scrollY[sn] or 0, 0, tab.maxScroll[sn])
+                else
+                    tab.maxScroll[sn] = 0
+                end
+            end
         end
+
+        -- mouse wheel scrolling for tab columns
+        utility:Connect(uis.InputChanged, function(input)
+            if input.UserInputType == Enum.UserInputType.MouseWheel and main_frame.Visible then
+                local delta = -input.Position.Z * 30
+                local tabsPos = tabs_frame.Position
+                local leftRect = {tabsPos + v2new(0, 0), tabsPos + v2new(tabs_frame.Size.X/2, tabs_frame.Size.Y)}
+                local rightRect = {tabsPos + v2new(tabs_frame.Size.X/2, 0), tabsPos + v2new(tabs_frame.Size.X, tabs_frame.Size.Y)}
+
+                if utility:MouseOverPosition(leftRect) then
+                    tab.scrollY[1] = math.clamp((tab.scrollY[1] or 0) + delta, 0, tab.maxScroll[1] or 0)
+                    tab:Update()
+                elseif utility:MouseOverPosition(rightRect) then
+                    tab.scrollY[2] = math.clamp((tab.scrollY[2] or 0) + delta, 0, tab.maxScroll[2] or 0)
+                    tab:Update()
+                end
+            end
+        end)
 
         function tab.Section(self, info)
             local name = info.name or "section"
