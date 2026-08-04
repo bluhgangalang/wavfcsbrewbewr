@@ -67,10 +67,12 @@ do
                 table.insert(library.groups[name], fakeDraw)
             end,
             ["OffsetX"] = function(x)
-                fakeDraw.SetOffset(x, fadeDraw.GetOffset().Y)
+                local off = fakeDraw.GetOffset()
+                fakeDraw.SetOffset(v2new(x, off.Y))
             end,
             ["OffsetY"] = function(Y)
-                fakeDraw.SetOffset(fadeDraw.GetOffset().X, y)
+                local off = fakeDraw.GetOffset()
+                fakeDraw.SetOffset(v2new(off.X, Y))
             end
         }
 
@@ -631,6 +633,8 @@ function library.New(self, info, theme)
         local offset = v2new(0, -19)
 
         local tab = {name = name, instances = {}, sections = {}, sides = {{}, {}}, on = false}
+        tab.scrollY = {0,0}
+        tab.maxScroll = {0,0}
 
         local count = 1
 
@@ -727,20 +731,12 @@ function library.New(self, info, theme)
                     -- // if its not first section
 
                     if i > 1 then
-
-                        -- // last section_frame instance
-
-                        local last_sframe = side[i - 1].instances[1]
-
-                        -- // set new section_frame instance offset with counting last section_frame offset (y) + size (y) + 16 (default offset)
-
-                        offset = offset + last_sframe.GetOffset().Y + last_sframe.Size.Y
-
+                        local last_section = side[i - 1]
+                        offset = offset + last_section.offsetY + last_section.instances[1].Size.Y
                     end
 
-                    -- // set offset
-
-                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2+6, offset))
+                    v.offsetY = offset
+                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2 + 6, offset - (tab.scrollY[sn] or 0)))
                 end
             end
 
@@ -748,6 +744,18 @@ function library.New(self, info, theme)
 
             for i, v in pairs(self.sections) do
                 v:Update()
+            end
+
+            -- compute max scroll per side by measuring the bottom of the last section
+            for sn, side in pairs(self.sides) do
+                local last = side[#side]
+                if last and last.instances and last.instances[1] then
+                    local bottom = last.offsetY + last.instances[1].Size.Y
+                    tab.maxScroll[sn] = math.max(0, bottom - tabs_frame.Size.Y + 6)
+                    tab.scrollY[sn] = math.clamp(tab.scrollY[sn] or 0, 0, tab.maxScroll[sn])
+                else
+                    tab.maxScroll[sn] = 0
+                end
             end
         end
 
@@ -759,6 +767,7 @@ function library.New(self, info, theme)
             -- // finally, new code;
 
             local autofill = info.autofill or false;
+            local scrollable = info.scrollable ~= false
 
             -- // side check
 
@@ -768,7 +777,7 @@ function library.New(self, info, theme)
 
             -- // section
 
-            local section = {name = name, side = side, instances = {}, scale = 0, things = {buttons = {}, toggles = {}, textboxes = {}, dropdowns = {}, sliders = {}, colorpickers ={}, keybinds = {}, lists = {}}, rna = render_non_attached}
+            local section = {name = name, side = side, instances = {}, scale = 0, things = {buttons = {}, toggles = {}, textboxes = {}, dropdowns = {}, sliders = {}, colorpickers ={}, keybinds = {}, lists = {}}, rna = render_non_attached, scrollable = scrollable, scrollY = 0, maxScroll = 0}
 
             local section_frame 
 
@@ -864,7 +873,13 @@ function library.New(self, info, theme)
 
                 local tside = tab.sides[self.side == "left" and 1 or 2]
 
-                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 10)
+                local contentHeight = self.scale > 0 and self.scale or 10
+                local availableHeight = tabs_frame.Size.Y - (section_frame.GetOffset().Y + 10)
+                local sectionHeight = table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y + 5) or contentHeight
+                if self.scrollable and availableHeight > 0 then
+                    sectionHeight = math.min(sectionHeight, availableHeight)
+                end
+                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, sectionHeight)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
                 section_accent.Size = v2new(8, 2)
@@ -880,6 +895,41 @@ function library.New(self, info, theme)
                 for _, thing in pairs({"buttons", "dropdowns", "sliders", "textboxes", "keybinds", "colorpickers", "toggles"}) do
                     for i, v in pairs(section.things[thing]) do
                         v:Update()
+                    end
+                end
+
+                -- scrolling: compute content size and clamp scroll
+                local contentHeight = self.scale > 0 and self.scale or 10
+                self.maxScroll = math.max(0, contentHeight - section_frame.Size.Y)
+
+                if self.scrollable then
+                    for _, coll in pairs(self.things) do
+                        for _, widget in pairs(coll) do
+                            local root = widget.instances and widget.instances[1]
+                            if root and root.GetOffset and root.SetOffset then
+                                    if root.baseOffset == nil then
+                                        root.baseOffset = root.GetOffset() or v2new()
+                                    end
+                                    local off = root.baseOffset or v2new()
+                                    local newY = ((off.Y) or 0) - (self.scrollY or 0)
+                                    root.SetOffset(v2new((off.X) or 0, newY))
+
+                                for _, inst in pairs(widget.instances or {}) do
+                                    if inst.Visible ~= nil and inst ~= section_frame and inst ~= section_inline and inst ~= section_outline and inst ~= section_accent and inst ~= section_title and inst ~= section_accent2 then
+                                        if inst.baseOffset == nil and inst.GetOffset then
+                                            inst.baseOffset = inst.GetOffset()
+                                        end
+                                        local pos = inst.Position or section_frame.Position or v2new()
+                                        local size = inst.Size or v2new(section_frame.Size.X, 10)
+                                        local topY = (pos and pos.Y) or 0
+                                        local bottomY = topY + ((size and size.Y) or 0)
+                                        local bodyTop = section_frame.Position.Y + 6
+                                        local bodyBottom = section_frame.Position.Y + section_frame.Size.Y - 6
+                                        inst.Visible = section_frame.Visible and bottomY >= bodyTop and topY <= bodyBottom
+                                    end
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -917,6 +967,16 @@ function library.New(self, info, theme)
                     end
                 elseif not utility:MouseOverDrawing(main_frame) and window.tooltip then
                     window.tooltip:SetPosition(v2new(-1000, -1000))
+                end
+            end)
+
+            -- mouse wheel scrolling for sections that are scrollable
+            utility:Connect(uis.InputChanged, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseWheel and section.scrollable and window.sshit and utility:MouseOverDrawing(section_frame) then
+                    local delta = -input.Position.Z * 30
+                    section.scrollY = math.clamp((section.scrollY or 0) + delta, 0, section.maxScroll or 0)
+                    -- trigger update so offsets are recalculated
+                    section:Update()
                 end
             end)
 
@@ -1190,16 +1250,15 @@ function library.New(self, info, theme)
             function section._Colorpicker(self, info, offsets, parent, do_update, pointer, cptable)
                 local name = info.name
                 local def = info.def or c3rgb(255, 0, 0)
-                local trans = info.trans or info.transparency
+                -- Alpha slider is always shown; always expose {color, alpha} so features can use it
                 local deftrans = info.deftrans or info.defaultrans or 0
                 local flag = info.flag
                 local callback = info.callback or function() end
 
-                -- Always show bottom alpha; only expose {color, alpha} to callback when trans is set
                 local colorpicker = {
                     value = {def, deftrans},
                     name = name,
-                    trans = trans and true or false,
+                    trans = true,
                     callback = callback,
                     pointer = pointer,
                     flag = flag,
@@ -1249,10 +1308,7 @@ function library.New(self, info, theme)
                 end 
 
                 local function EmitValue(self)
-                    if self.trans then
-                        return self.value
-                    end
-                    return self.value[1]
+                    return self.value
                 end
 
                 function colorpicker.Get(self)
@@ -1261,10 +1317,7 @@ function library.New(self, info, theme)
                         color = def
                     end
                     local h, s, v = color:ToHSV()
-                    if self.trans then
-                        return {{h, s, v}, tonumber(self.value and self.value[2]) or 0}
-                    end
-                    return {h, s, v}
+                    return {{h, s, v}, tonumber(self.value and self.value[2]) or 0}
                 end
 
                 function colorpicker.SetOffset(self, offset)
