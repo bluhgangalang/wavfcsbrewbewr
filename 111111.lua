@@ -1,33 +1,8 @@
 -- // fuck off
 
--- lib.lua reverted to runtime-download stub
-
-local function LoadUILibrary()
-    local LastErr
-    local function IsUsableUI(Source)
-        return typeof(Source) == "string" and #Source > 1000 and string.find(Source, "function library", 1, true)
-    end
-
-    local Source
-    local Ok, Result = pcall(game.HttpGet, game, "https://raw.githubusercontent.com/bluhgangalang/wavfcsbrewbewr/refs/heads/main/111111.lua")
-    if Ok and IsUsableUI(Result) then
-        Source = Result
-    else
-        LastErr = Result
-    end
-
-    if not Source then
-        error("Failed to download UI library: " .. tostring(LastErr))
-    end
-
-    local Chunk, Err = loadstring(Source, "uilib")
-    if not Chunk then
-        error("Failed to load UI library: " .. tostring(Err))
-    end
-    return Chunk()
-end
-
-return LoadUILibrary()
+local uis = game:GetService("UserInputService")
+local rs = game:GetService("RunService")
+local ts = game:GetService("TweenService")
 local plrs = game:GetService("Players")
 local stats = game:GetService("Stats")
 
