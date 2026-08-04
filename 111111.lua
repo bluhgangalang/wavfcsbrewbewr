@@ -512,7 +512,7 @@ function library.New(self, info, theme)
     }
 
     local name = info.name or "worst ui library ever"
-    local size = typeof(info.size) == "Vector2" and info.size or v2new(500, 600)
+    local size = typeof(info.size) == "Vector2" and info.size or v2new(560, 820)
 
     local window = {shit = {}, kbds = {}, rna = {}, sshit = nil, theme = theme, tabs = {}, _last = {0, 0}, start = v2zero, connections = {}, dragging = false}
 
