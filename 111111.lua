@@ -67,10 +67,12 @@ do
                 table.insert(library.groups[name], fakeDraw)
             end,
             ["OffsetX"] = function(x)
-                fakeDraw.SetOffset(x, fadeDraw.GetOffset().Y)
+                local off = fakeDraw.GetOffset()
+                fakeDraw.SetOffset(v2new(x, off.Y))
             end,
             ["OffsetY"] = function(Y)
-                fakeDraw.SetOffset(fadeDraw.GetOffset().X, y)
+                local off = fakeDraw.GetOffset()
+                fakeDraw.SetOffset(v2new(off.X, Y))
             end
         }
 
