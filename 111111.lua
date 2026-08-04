@@ -919,10 +919,10 @@ function library.New(self, info, theme)
                                         if inst.baseOffset == nil and inst.GetOffset then
                                             inst.baseOffset = inst.GetOffset()
                                         end
-                                        local pos = inst.Position or section_frame.Position
+                                        local pos = inst.Position or section_frame.Position or v2new()
                                         local size = inst.Size or v2new(section_frame.Size.X, 10)
-                                        local topY = pos.Y
-                                        local bottomY = topY + size.Y
+                                        local topY = (pos and pos.Y) or 0
+                                        local bottomY = topY + ((size and size.Y) or 0)
                                         local bodyTop = section_frame.Position.Y + 6
                                         local bodyBottom = section_frame.Position.Y + section_frame.Size.Y - 6
                                         inst.Visible = section_frame.Visible and bottomY >= bodyTop and topY <= bodyBottom
