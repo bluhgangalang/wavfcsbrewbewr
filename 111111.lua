@@ -901,28 +901,23 @@ function library.New(self, info, theme)
                 self.maxScroll = math.max(0, contentHeight - section_frame.Size.Y)
 
                 if self.scrollable then
-                    -- adjust offsets and visibility of child elements according to scrollY
-                    local function adjustWidget(v)
-                        pcall(function()
-                            if v.baseOffset == nil and v.GetOffset then
-                                v.baseOffset = v.GetOffset()
-                            end
-                            local off = v.baseOffset or (v.GetOffset and v.GetOffset() or v2new(0, 0))
-                            local newY = off.Y - (self.scrollY or 0)
-                            if v.SetOffset then
-                                v.SetOffset(v2new(off.X, newY))
-                            end
-                            local absY = section_frame.Position.Y + newY
-                            local isVisible = section_frame.Visible and absY >= section_frame.Position.Y and absY <= section_frame.Position.Y + section_frame.Size.Y - 18
-                            if v.Visible ~= nil then
-                                v.Visible = isVisible
-                            end
-                        end)
-                    end
-
                     for _, coll in pairs(self.things) do
-                        for _, v in pairs(coll) do
-                            adjustWidget(v)
+                        for _, widget in pairs(coll) do
+                            for _, inst in pairs(widget.instances or {}) do
+                                if inst.GetOffset and inst.SetOffset then
+                                    if inst.baseOffset == nil then
+                                        inst.baseOffset = inst.GetOffset()
+                                    end
+                                    local off = inst.baseOffset
+                                    local newY = off.Y - (self.scrollY or 0)
+                                    inst.SetOffset(v2new(off.X, newY))
+
+                                    local topY = section_frame.Position.Y + newY
+                                    local bottomY = topY + (inst.Size and inst.Size.Y or 16)
+                                    local visible = section_frame.Visible and bottomY >= section_frame.Position.Y + 4 and topY <= section_frame.Position.Y + section_frame.Size.Y - 4
+                                    inst.Visible = visible
+                                end
+                            end
                         end
                     end
                 end
