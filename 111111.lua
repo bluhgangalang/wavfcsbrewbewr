@@ -729,20 +729,12 @@ function library.New(self, info, theme)
                     -- // if its not first section
 
                     if i > 1 then
-
-                        -- // last section_frame instance
-
-                        local last_sframe = side[i - 1].instances[1]
-
-                        -- // set new section_frame instance offset with counting last section_frame offset (y) + size (y) + 16 (default offset)
-
-                        offset = offset + last_sframe.GetOffset().Y + last_sframe.Size.Y
-
+                        local last_section = side[i - 1]
+                        offset = offset + last_section.offsetY + last_section.instances[1].Size.Y
                     end
 
-                    -- // set offset
-
-                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2+6, offset - (tab.scrollY[sn] or 0)))
+                    v.offsetY = offset
+                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2 + 6, offset - (tab.scrollY[sn] or 0)))
                 end
             end
 
@@ -752,11 +744,11 @@ function library.New(self, info, theme)
                 v:Update()
             end
 
-            -- compute max scroll per side by measuring last section bottom
+            -- compute max scroll per side by measuring the bottom of the last section
             for sn, side in pairs(self.sides) do
                 local last = side[#side]
                 if last and last.instances and last.instances[1] then
-                    local bottom = last.instances[1].GetOffset().Y + last.instances[1].Size.Y
+                    local bottom = last.offsetY + last.instances[1].Size.Y
                     tab.maxScroll[sn] = math.max(0, bottom - tabs_frame.Size.Y + 6)
                     tab.scrollY[sn] = math.clamp(tab.scrollY[sn] or 0, 0, tab.maxScroll[sn])
                 else
