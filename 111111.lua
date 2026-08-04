@@ -903,19 +903,23 @@ function library.New(self, info, theme)
                 if self.scrollable then
                     for _, coll in pairs(self.things) do
                         for _, widget in pairs(coll) do
-                            for _, inst in pairs(widget.instances or {}) do
-                                if inst.GetOffset and inst.SetOffset then
-                                    if inst.baseOffset == nil then
-                                        inst.baseOffset = inst.GetOffset()
-                                    end
-                                    local off = inst.baseOffset
-                                    local newY = off.Y - (self.scrollY or 0)
-                                    inst.SetOffset(v2new(off.X, newY))
+                            local root = widget.instances and widget.instances[1]
+                            if root and root.GetOffset and root.SetOffset then
+                                if root.baseOffset == nil then
+                                    root.baseOffset = root.GetOffset()
+                                end
+                                local off = root.baseOffset
+                                local newY = off.Y - (self.scrollY or 0)
+                                root.SetOffset(v2new(off.X, newY))
 
-                                    local topY = section_frame.Position.Y + newY
-                                    local bottomY = topY + (inst.Size and inst.Size.Y or 16)
-                                    local visible = section_frame.Visible and bottomY >= section_frame.Position.Y + 4 and topY <= section_frame.Position.Y + section_frame.Size.Y - 4
-                                    inst.Visible = visible
+                                local topY = section_frame.Position.Y + newY
+                                local bottomY = topY + (root.Size and root.Size.Y or 16)
+                                local visible = section_frame.Visible and bottomY >= section_frame.Position.Y + 4 and topY <= section_frame.Position.Y + section_frame.Size.Y - 4
+
+                                for _, inst in pairs(widget.instances or {}) do
+                                    if inst.Visible ~= nil then
+                                        inst.Visible = visible
+                                    end
                                 end
                             end
                         end
