@@ -913,11 +913,17 @@ function library.New(self, info, theme)
                                 root.SetOffset(v2new(off.X, newY))
 
                                 for _, inst in pairs(widget.instances or {}) do
-                                    if inst.Visible ~= nil then
-                                        local topY = inst.Position and inst.Position.Y or section_frame.Position.Y
-                                        local height = inst.Size and inst.Size.Y or 16
-                                        local bottomY = topY + height
-                                        inst.Visible = section_frame.Visible and bottomY >= section_frame.Position.Y + 4 and topY <= section_frame.Position.Y + section_frame.Size.Y - 4
+                                    if inst.Visible ~= nil and inst ~= section_frame and inst ~= section_inline and inst ~= section_outline and inst ~= section_accent and inst ~= section_title and inst ~= section_accent2 then
+                                        if inst.baseOffset == nil and inst.GetOffset then
+                                            inst.baseOffset = inst.GetOffset()
+                                        end
+                                        local pos = inst.Position or section_frame.Position
+                                        local size = inst.Size or v2new(section_frame.Size.X, 10)
+                                        local topY = pos.Y
+                                        local bottomY = topY + size.Y
+                                        local bodyTop = section_frame.Position.Y + 6
+                                        local bodyBottom = section_frame.Position.Y + section_frame.Size.Y - 6
+                                        inst.Visible = section_frame.Visible and bottomY >= bodyTop and topY <= bodyBottom
                                     end
                                 end
                             end
