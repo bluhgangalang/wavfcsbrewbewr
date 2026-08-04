@@ -67,12 +67,10 @@ do
                 table.insert(library.groups[name], fakeDraw)
             end,
             ["OffsetX"] = function(x)
-                local off = fakeDraw.GetOffset()
-                fakeDraw.SetOffset(v2new(x, off.Y))
+                fakeDraw.SetOffset(x, fadeDraw.GetOffset().Y)
             end,
             ["OffsetY"] = function(Y)
-                local off = fakeDraw.GetOffset()
-                fakeDraw.SetOffset(v2new(off.X, Y))
+                fakeDraw.SetOffset(fadeDraw.GetOffset().X, y)
             end
         }
 
@@ -633,8 +631,6 @@ function library.New(self, info, theme)
         local offset = v2new(0, -19)
 
         local tab = {name = name, instances = {}, sections = {}, sides = {{}, {}}, on = false}
-        tab.scrollY = {0,0}
-        tab.maxScroll = {0,0}
 
         local count = 1
 
@@ -731,12 +727,20 @@ function library.New(self, info, theme)
                     -- // if its not first section
 
                     if i > 1 then
-                        local last_section = side[i - 1]
-                        offset = offset + last_section.offsetY + last_section.instances[1].Size.Y
+
+                        -- // last section_frame instance
+
+                        local last_sframe = side[i - 1].instances[1]
+
+                        -- // set new section_frame instance offset with counting last section_frame offset (y) + size (y) + 16 (default offset)
+
+                        offset = offset + last_sframe.GetOffset().Y + last_sframe.Size.Y
+
                     end
 
-                    v.offsetY = offset
-                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2 + 6, offset - (tab.scrollY[sn] or 0)))
+                    -- // set offset
+
+                    v.instances[1].SetOffset(v2new(sn == 1 and 6 or tabs_frame.Size.X/2+6, offset))
                 end
             end
 
@@ -744,18 +748,6 @@ function library.New(self, info, theme)
 
             for i, v in pairs(self.sections) do
                 v:Update()
-            end
-
-            -- compute max scroll per side by measuring the bottom of the last section
-            for sn, side in pairs(self.sides) do
-                local last = side[#side]
-                if last and last.instances and last.instances[1] then
-                    local bottom = last.offsetY + last.instances[1].Size.Y
-                    tab.maxScroll[sn] = math.max(0, bottom - tabs_frame.Size.Y + 6)
-                    tab.scrollY[sn] = math.clamp(tab.scrollY[sn] or 0, 0, tab.maxScroll[sn])
-                else
-                    tab.maxScroll[sn] = 0
-                end
             end
         end
 
@@ -767,7 +759,7 @@ function library.New(self, info, theme)
             -- // finally, new code;
 
             local autofill = info.autofill or false;
-            local scrollable = info.scrollable ~= false
+            local scrollable = info.scrollable or autofill or false
 
             -- // side check
 
@@ -873,13 +865,7 @@ function library.New(self, info, theme)
 
                 local tside = tab.sides[self.side == "left" and 1 or 2]
 
-                local contentHeight = self.scale > 0 and self.scale or 10
-                local availableHeight = tabs_frame.Size.Y - (section_frame.GetOffset().Y + 10)
-                local sectionHeight = table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y + 5) or contentHeight
-                if self.scrollable and availableHeight > 0 then
-                    sectionHeight = math.min(sectionHeight, availableHeight)
-                end
-                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, sectionHeight)
+                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 10)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
                 section_accent.Size = v2new(8, 2)
@@ -899,36 +885,28 @@ function library.New(self, info, theme)
                 end
 
                 -- scrolling: compute content size and clamp scroll
-                local contentHeight = self.scale > 0 and self.scale or 10
-                self.maxScroll = math.max(0, contentHeight - section_frame.Size.Y)
+                local contentHeight = math.max(self.scale, 10)
+                self.maxScroll = math.max(0, contentHeight - section_frame.Size.Y + 6)
 
                 if self.scrollable then
-                    for _, coll in pairs(self.things) do
-                        for _, widget in pairs(coll) do
-                            local root = widget.instances and widget.instances[1]
-                            if root and root.GetOffset and root.SetOffset then
-                                if root.baseOffset == nil then
-                                    root.baseOffset = root.GetOffset()
-                                end
-                                local off = root.baseOffset
-                                local newY = off.Y - (self.scrollY or 0)
-                                root.SetOffset(v2new(off.X, newY))
-
-                                for _, inst in pairs(widget.instances or {}) do
-                                    if inst.Visible ~= nil and inst ~= section_frame and inst ~= section_inline and inst ~= section_outline and inst ~= section_accent and inst ~= section_title and inst ~= section_accent2 then
-                                        if inst.baseOffset == nil and inst.GetOffset then
-                                            inst.baseOffset = inst.GetOffset()
-                                        end
-                                        local pos = inst.Position or section_frame.Position or v2new()
-                                        local size = inst.Size or v2new(section_frame.Size.X, 10)
-                                        local topY = (pos and pos.Y) or 0
-                                        local bottomY = topY + ((size and size.Y) or 0)
-                                        local bodyTop = section_frame.Position.Y + 6
-                                        local bodyBottom = section_frame.Position.Y + section_frame.Size.Y - 6
-                                        inst.Visible = section_frame.Visible and bottomY >= bodyTop and topY <= bodyBottom
-                                    end
-                                end
+                    -- adjust offsets and visibility of child elements according to scrollY
+                    local function adjustWidget(v)
+                        pcall(function()
+                            local off = v.GetOffset and v.GetOffset() or v.GetOffset and Vector2.new(0, 0)
+                            local newY = off.Y - (self.scrollY or 0)
+                            if v.SetOffset then
+                                v.SetOffset(v2new(off.X, newY))
                             end
+                            local isVisible = section_frame.Visible and (newY >= -20 and newY <= section_frame.Size.Y - 6)
+                            if v.Visible ~= nil then
+                                v.Visible = isVisible
+                            end
+                        end)
+                    end
+
+                    for _, coll in pairs(self.things) do
+                        for _, v in pairs(coll) do
+                            adjustWidget(v)
                         end
                     end
                 end
