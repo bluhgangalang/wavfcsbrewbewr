@@ -512,7 +512,7 @@ function library.New(self, info, theme)
     }
 
     local name = info.name or "worst ui library ever"
-    local size = typeof(info.size) == "Vector2" and info.size or v2new(560, 820)
+    local size = typeof(info.size) == "Vector2" and info.size or v2new(500, 600)
 
     local window = {shit = {}, kbds = {}, rna = {}, sshit = nil, theme = theme, tabs = {}, _last = {0, 0}, start = v2zero, connections = {}, dragging = false}
 
@@ -757,24 +757,6 @@ function library.New(self, info, theme)
             end
         end
 
-        -- mouse wheel scrolling for tab columns
-        utility:Connect(uis.InputChanged, function(input)
-            if input.UserInputType == Enum.UserInputType.MouseWheel and main_frame.Visible then
-                local delta = -input.Position.Z * 30
-                local tabsPos = tabs_frame.Position
-                local leftRect = {tabsPos + v2new(0, 0), tabsPos + v2new(tabs_frame.Size.X/2, tabs_frame.Size.Y)}
-                local rightRect = {tabsPos + v2new(tabs_frame.Size.X/2, 0), tabsPos + v2new(tabs_frame.Size.X, tabs_frame.Size.Y)}
-
-                if utility:MouseOverPosition(leftRect) then
-                    tab.scrollY[1] = math.clamp((tab.scrollY[1] or 0) + delta, 0, tab.maxScroll[1] or 0)
-                    tab:Update()
-                elseif utility:MouseOverPosition(rightRect) then
-                    tab.scrollY[2] = math.clamp((tab.scrollY[2] or 0) + delta, 0, tab.maxScroll[2] or 0)
-                    tab:Update()
-                end
-            end
-        end)
-
         function tab.Section(self, info)
             local name = info.name or "section"
             local side = info.side or "left" side = tostring(side):lower()
@@ -783,7 +765,7 @@ function library.New(self, info, theme)
             -- // finally, new code;
 
             local autofill = info.autofill or false;
-            local scrollable = info.scrollable or autofill or false
+            local scrollable = info.scrollable ~= false
 
             -- // side check
 
@@ -889,7 +871,13 @@ function library.New(self, info, theme)
 
                 local tside = tab.sides[self.side == "left" and 1 or 2]
 
-                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y+5) or self.scale > 0 and self.scale or 10)
+                local contentHeight = self.scale > 0 and self.scale or 10
+                local availableHeight = tabs_frame.Size.Y - (section_frame.GetOffset().Y + 10)
+                local sectionHeight = table.find(tside, self) == #tside and autofill and tabs_frame.Size.Y - (section_frame.GetOffset().Y + 5) or contentHeight
+                if self.scrollable and availableHeight > 0 then
+                    sectionHeight = math.min(sectionHeight, availableHeight)
+                end
+                section_frame.Size = v2new(self.rna and 228 or tabs_frame.Size.X / 2 - 12, sectionHeight)
                 section_inline.Size = section_frame.Size + v2new(2, 2)
                 section_outline.Size = section_inline.Size + v2new(2, 2)
                 section_accent.Size = v2new(8, 2)
@@ -909,19 +897,23 @@ function library.New(self, info, theme)
                 end
 
                 -- scrolling: compute content size and clamp scroll
-                local contentHeight = math.max(self.scale, 10)
-                self.maxScroll = math.max(0, contentHeight - section_frame.Size.Y + 6)
+                local contentHeight = self.scale > 0 and self.scale or 10
+                self.maxScroll = math.max(0, contentHeight - section_frame.Size.Y)
 
                 if self.scrollable then
                     -- adjust offsets and visibility of child elements according to scrollY
                     local function adjustWidget(v)
                         pcall(function()
-                            local off = v.GetOffset and v.GetOffset() or v.GetOffset and Vector2.new(0, 0)
+                            if v.baseOffset == nil and v.GetOffset then
+                                v.baseOffset = v.GetOffset()
+                            end
+                            local off = v.baseOffset or (v.GetOffset and v.GetOffset() or v2new(0, 0))
                             local newY = off.Y - (self.scrollY or 0)
                             if v.SetOffset then
                                 v.SetOffset(v2new(off.X, newY))
                             end
-                            local isVisible = section_frame.Visible and (newY >= -20 and newY <= section_frame.Size.Y - 6)
+                            local absY = section_frame.Position.Y + newY
+                            local isVisible = section_frame.Visible and absY >= section_frame.Position.Y and absY <= section_frame.Position.Y + section_frame.Size.Y - 18
                             if v.Visible ~= nil then
                                 v.Visible = isVisible
                             end
